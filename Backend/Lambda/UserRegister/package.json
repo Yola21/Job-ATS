@@ -1,0 +1,17 @@
+{
+  "name": "userregister",
+  "version": "1.0.0",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "aws-sdk": "^2.1666.0",
+    "bcryptjs": "^2.4.3",
+    "uuid": "^10.0.0"
+  }
+}
