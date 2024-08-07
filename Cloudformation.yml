@@ -121,20 +121,113 @@ Resources:
           FromPort: 3306
           ToPort: 3306
           SourceSecurityGroupId: !Ref PublicSecurityGroup
-    
-  EC2Instance:
-    Type: AWS::EC2::Instance
+
+  ReactAppLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
-      InstanceType: t3.medium
-      KeyName: !Ref KeyPairName
-      ImageId: ami-080e1f13689e07408
-      SubnetId: !Ref PublicSubnet1
-      SecurityGroupIds:
+      ImageId: ami-04a81a99f5ec58529 # Ubuntu Server 22.04 LTS (64-bit x86)
+      InstanceType: t2.micro
+      SecurityGroups:
         - !Ref PublicSecurityGroup
+      KeyName: !Ref KeyPairName
+      AssociatePublicIpAddress: true
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -e
+          exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+ 
+          echo "Starting script execution..."
+ 
+          # Update and install necessary packages
+          sudo apt-get update -y
+          sudo apt-get install -y git nodejs npm nginx
+ 
+          echo "Packages updated and installed."
+ 
+          # Clone the project repository
+          GIT_REPO_URL="https://github.com/Yola21/Job-ATS.git"
+          sudo git clone "$GIT_REPO_URL" /home/ubuntu/react-app
+ 
+          echo "Repository cloned."
+ 
+          # Change to the project directory
+          cd /home/ubuntu/react-app/Frontend
+ 
+          # Install npm dependencies and build the project
+          sudo npm install
+          sudo npm run build
+ 
+          echo "npm dependencies installed and project built."
+ 
+          # Configure Nginx to proxy requests to the Node.js application
+          PUBLIC_IP=$(curl -s http://checkip.amazonaws.com)
+          echo "Public IP address: $PUBLIC_IP"
+ 
+          echo '
+          server {
+              listen 80;
+              server_name $PUBLIC_IP;  # Using "_" to accept all requests
+ 
+              location / {
+                  proxy_pass http://localhost:3000;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection "upgrade";
+                  proxy_set_header Host $host;
+                  proxy_cache_bypass $http_upgrade;
+              }
+          }' | sudo tee /etc/nginx/sites-available/react-app
+ 
+          sudo ln -s /etc/nginx/sites-available/react-app /etc/nginx/sites-enabled/
+          sudo nginx -t
+          sudo systemctl restart nginx
+ 
+          # Install PM2 and start the application
+          sudo npm install -g pm2
+          sudo pm2 start npm --name "resume-parser" -- start
+          sudo pm2 save
+          sudo pm2 startup
+ 
+          echo "PM2 installed and application started."
+ 
+          echo "Nginx configured to proxy requests to Node.js application."
+          echo "Script execution completed."
+ 
+  ReactAppAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet1
+      LaunchConfigurationName: !Ref ReactAppLaunchConfig
+      MinSize: '1'
+      MaxSize: '3'
+      DesiredCapacity: '1'
       Tags:
         - Key: Name
-          Value: resumeparserec2
-  
+          Value: ReactAppInstance
+          PropagateAtLaunch: true
+ 
+  ScaleUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref ReactAppAutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 60.0
+ 
+  ScaleDownPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref ReactAppAutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 30.0
+
   ResumeParserJobs:
     Type: AWS::DynamoDB::Table
     Properties:
