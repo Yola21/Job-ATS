@@ -19,12 +19,12 @@ function JobDetail() {
     experience: '',
   });
   const { jobId } = useParams();
+  const API = process.env.REACT_APP_RESUME_PARSER_API
   console.log(jobId);
 
   const fetchJob = async () => {
     try {
-      // const response = await axios.post('https://6akzx62xwi.execute-api.us-east-1.amazonaws.com/dev/job/', {
-      const response = await axios.post('https://fyasa2z8jh.execute-api.us-east-1.amazonaws.com/prod/job/', {
+      const response = await axios.post(`${API}/job/`, {
         body: JSON.stringify({ jobId }),
       });
       console.log(response);
@@ -59,15 +59,10 @@ function JobDetail() {
     if (resume) {
       setLoading(true);
       try {
-        // const response = await axios.post('https://0clhmec728.execute-api.us-east-1.amazonaws.com/prod/extract', {
-        const response = await axios.post('https://fyasa2z8jh.execute-api.us-east-1.amazonaws.com/prod/extract', {
+        const response = await axios.post(`${API}/extract`, {
           fileName: resume.fileName,
           fileContent: resume.fileContent,
         });
-        // const response = await axios.post('https://6akzx62xwi.execute-api.us-east-1.amazonaws.com/dev/extract', {
-        //   fileName: resume.fileName,
-        //   fileContent: resume.fileContent,
-        // });
 
         console.log(response);
         console.log(JSON.parse(response.data.body));
@@ -107,11 +102,7 @@ function JobDetail() {
       userEmail: localStorage.getItem("userEmail") };
 
     try {
-      // await axios.post('https://6akzx62xwi.execute-api.us-east-1.amazonaws.com/dev/apply', {
-      //   body: JSON.stringify(body),
-      // });
-      // await axios.post('https://0clhmec728.execute-api.us-east-1.amazonaws.com/prod/apply', {
-      await axios.post('https://fyasa2z8jh.execute-api.us-east-1.amazonaws.com/prod/apply', {
+      await axios.post(`${API}/apply`, {
         body: JSON.stringify(body),
       });
       toast.success("Application submitted successfully!");

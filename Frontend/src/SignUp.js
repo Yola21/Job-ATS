@@ -10,6 +10,7 @@ function SignUp() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const history = useHistory();
+  const API = process.env.REACT_APP_RESUME_PARSER_API
 
   const handleSignUp = async () => {
     if (password !== confirmPassword) {
@@ -24,9 +25,7 @@ function SignUp() {
     };
 
     try {
-      // const response = await axios.post('https://6akzx62xwi.execute-api.us-east-1.amazonaws.com/dev/signup', 
-      // const response = await axios.post('https://0clhmec728.execute-api.us-east-1.amazonaws.com/prod/register', 
-      const response = await axios.post('https://fyasa2z8jh.execute-api.us-east-1.amazonaws.com/prod/register', 
+      const response = await axios.post(`${API}/register`, 
         {
           body: JSON.stringify(body)
         }

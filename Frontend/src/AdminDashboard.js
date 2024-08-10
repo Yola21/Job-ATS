@@ -1,4 +1,3 @@
-// src/components/JobDashboard.js
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
@@ -12,14 +11,14 @@ const AdminDashboard = () => {
     title: '',
   });
   const [isEditing, setIsEditing] = useState(false);
+  const API = process.env.REACT_APP_RESUME_PARSER_API
 
   useEffect(() => {
     fetchJobs();
   }, []);
 
   const fetchJobs = async () => {
-    // const response = await axios.get('https://6akzx62xwi.execute-api.us-east-1.amazonaws.com/dev/jobs');
-    const response = await axios.get('https://fyasa2z8jh.execute-api.us-east-1.amazonaws.com/prod/jobs');
+    const response = await axios.get(`${API}/jobs`);
     console.log(response)
     const data = JSON.parse(response.data.body)
     setJobs(data);
@@ -32,9 +31,9 @@ const AdminDashboard = () => {
 
   const handleAddOrUpdate = async () => {
     if (isEditing) {
-      await axios.put('https://fyasa2z8jh.execute-api.us-east-1.amazonaws.com/prod/jobs', formData);
+      await axios.put(`${API}/jobs`, formData);
     } else {
-      await axios.post('https://fyasa2z8jh.execute-api.us-east-1.amazonaws.com/prod/jobs', formData);
+      await axios.post(`${API}/jobs`, formData);
     }
     fetchJobs();
     setFormData({ jobId: '', company: '', description: '', location: '', title: '' });
@@ -48,7 +47,7 @@ const AdminDashboard = () => {
 
   const handleDelete = async (e, jobId) => {
     console.log(jobId)
-    await axios.delete('https://fyasa2z8jh.execute-api.us-east-1.amazonaws.com/prod/jobs', {jobId: jobId});
+    await axios.delete(`${API}/jobs`, {jobId: jobId});
     fetchJobs();
   };
 

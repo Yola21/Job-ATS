@@ -154,6 +154,7 @@ Resources:
           # Change to the project directory
           cd /home/ubuntu/react-app/Frontend
  
+          echo "REACT_APP_API_URL=http://localhost:3000/" | sudo tee .env
           # Install npm dependencies and build the project
           sudo npm install
           sudo npm run build
@@ -177,7 +178,7 @@ Resources:
                   proxy_set_header Host $host;
                   proxy_cache_bypass $http_upgrade;
               }
-          }' | sudo tee /etc/nginx/sites-available/react-app
+          }' | sudo tee /etc/nginx/sites-available/react-app > /dev/null
  
           sudo ln -s /etc/nginx/sites-available/react-app /etc/nginx/sites-enabled/
           sudo nginx -t

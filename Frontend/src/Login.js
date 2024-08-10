@@ -6,13 +6,13 @@ import axios from 'axios';
 function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const API = process.env.REACT_APP_RESUME_PARSER_API
 
   const handleLogin = async () => {
     const body = {email, password};
 
     try {
-      // const response = await axios.post('https://0clhmec728.execute-api.us-east-1.amazonaws.com/prod/login', {
-      const response = await axios.post('https://fyasa2z8jh.execute-api.us-east-1.amazonaws.com/prod/login', {
+      const response = await axios.post(`${API}/login`, {
         body: JSON.stringify(body)
       });
       console.log(response);
@@ -28,6 +28,10 @@ function Login() {
       toast.error("Login failed. Please try again.");
     }
   };
+
+  const handleSignUp = () => {
+    window.location.href = "/signup"
+  }
 
   return (
     <Grid container spacing={2} style={{ padding: '2rem' }}>
@@ -51,9 +55,12 @@ function Login() {
           onChange={(e) => setPassword(e.target.value)}
         />
       </Grid>
-      <Grid item xs={12}>
+      <Grid item style={{display: 'flex', flexDirection: 'column'}}>
         <Button variant="contained" color="primary" onClick={handleLogin}>
           Login
+        </Button>
+        <Button variant="contained" color="default" style={{marginTop: '1rem'}} onClick={handleSignUp}>
+          Signup
         </Button>
       </Grid>
     </Grid>
