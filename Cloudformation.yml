@@ -18,7 +18,7 @@ Resources:
         - Key: Name
           Value: resumeparservpc
 
-  PublicSubnet1:
+  PublicSubnet:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
@@ -27,38 +27,7 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: PublicSubnet1
-
-  PublicSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: "10.0.2.0/24"
-      AvailabilityZone: !Select [1, !GetAZs ""]
-      MapPublicIpOnLaunch: true
-      Tags:
-        - Key: Name
-          Value: PublicSubnet2
-
-  PrivateSubnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: "10.0.3.0/24"
-      AvailabilityZone: !Select [0, !GetAZs ""]
-      Tags:
-        - Key: Name
-          Value: PrivateSubnet1
-
-  PrivateSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: "10.0.4.0/24"
-      AvailabilityZone: !Select [1, !GetAZs ""]
-      Tags:
-        - Key: Name
-          Value: PrivateSubnet2
+          Value: PublicSubnet
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -90,7 +59,7 @@ Resources:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PublicRouteTable
-      SubnetId: !Ref PublicSubnet1
+      SubnetId: !Ref PublicSubnet
 
   PublicSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -110,124 +79,6 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
-
-  PrivateSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security group for private resources
-      VpcId: !Ref VPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 3306
-          ToPort: 3306
-          SourceSecurityGroupId: !Ref PublicSecurityGroup
-
-  ReactAppLaunchConfig:
-    Type: AWS::AutoScaling::LaunchConfiguration
-    Properties:
-      ImageId: ami-04a81a99f5ec58529 # Ubuntu Server 22.04 LTS (64-bit x86)
-      InstanceType: t2.micro
-      SecurityGroups:
-        - !Ref PublicSecurityGroup
-      KeyName: !Ref KeyPairName
-      AssociatePublicIpAddress: true
-      UserData:
-        Fn::Base64: |
-          #!/bin/bash
-          set -e
-          exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
- 
-          echo "Starting script execution..."
- 
-          # Update and install necessary packages
-          sudo apt-get update -y
-          sudo apt-get install -y git nodejs npm nginx
- 
-          echo "Packages updated and installed."
- 
-          # Clone the project repository
-          GIT_REPO_URL="https://github.com/Yola21/Job-ATS.git"
-          sudo git clone "$GIT_REPO_URL" /home/ubuntu/react-app
- 
-          echo "Repository cloned."
- 
-          # Change to the project directory
-          cd /home/ubuntu/react-app/Frontend
- 
-          echo "REACT_APP_API_URL=http://localhost:3000/" | sudo tee .env
-          # Install npm dependencies and build the project
-          sudo npm install
-          sudo npm run build
- 
-          echo "npm dependencies installed and project built."
- 
-          # Configure Nginx to proxy requests to the Node.js application
-          PUBLIC_IP=$(curl -s http://checkip.amazonaws.com)
-          echo "Public IP address: $PUBLIC_IP"
- 
-          echo '
-          server {
-              listen 80;
-              server_name $PUBLIC_IP;  # Using "_" to accept all requests
- 
-              location / {
-                  proxy_pass http://localhost:3000;
-                  proxy_http_version 1.1;
-                  proxy_set_header Upgrade $http_upgrade;
-                  proxy_set_header Connection "upgrade";
-                  proxy_set_header Host $host;
-                  proxy_cache_bypass $http_upgrade;
-              }
-          }' | sudo tee /etc/nginx/sites-available/react-app > /dev/null
- 
-          sudo ln -s /etc/nginx/sites-available/react-app /etc/nginx/sites-enabled/
-          sudo nginx -t
-          sudo systemctl restart nginx
- 
-          # Install PM2 and start the application
-          sudo npm install -g pm2
-          sudo pm2 start npm --name "resume-parser" -- start
-          sudo pm2 save
-          sudo pm2 startup
- 
-          echo "PM2 installed and application started."
- 
-          echo "Nginx configured to proxy requests to Node.js application."
-          echo "Script execution completed."
- 
-  ReactAppAutoScalingGroup:
-    Type: AWS::AutoScaling::AutoScalingGroup
-    Properties:
-      VPCZoneIdentifier:
-        - !Ref PublicSubnet1
-      LaunchConfigurationName: !Ref ReactAppLaunchConfig
-      MinSize: '1'
-      MaxSize: '3'
-      DesiredCapacity: '1'
-      Tags:
-        - Key: Name
-          Value: ReactAppInstance
-          PropagateAtLaunch: true
- 
-  ScaleUpPolicy:
-    Type: AWS::AutoScaling::ScalingPolicy
-    Properties:
-      AutoScalingGroupName: !Ref ReactAppAutoScalingGroup
-      PolicyType: TargetTrackingScaling
-      TargetTrackingConfiguration:
-        PredefinedMetricSpecification:
-          PredefinedMetricType: ASGAverageCPUUtilization
-        TargetValue: 60.0
- 
-  ScaleDownPolicy:
-    Type: AWS::AutoScaling::ScalingPolicy
-    Properties:
-      AutoScalingGroupName: !Ref ReactAppAutoScalingGroup
-      PolicyType: TargetTrackingScaling
-      TargetTrackingConfiguration:
-        PredefinedMetricSpecification:
-          PredefinedMetricType: ASGAverageCPUUtilization
-        TargetValue: 30.0
 
   ResumeParserJobs:
     Type: AWS::DynamoDB::Table
@@ -333,7 +184,6 @@ Resources:
       FunctionName: ResumeParser_SubmitJobApplication
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
-      # Role: "arn:aws:iam::287269978254:role/LabRole"
       Runtime: nodejs20.x
       Code:
         S3Bucket: resume-parser-yola-job-application
@@ -347,7 +197,6 @@ Resources:
       FunctionName: ResumeParser_ResumeExtraction
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
-      # Role: "arn:aws:iam::287269978254:role/LabRole"
       Runtime: nodejs20.x
       Code:
         S3Bucket: resume-parser-yola-resume-extraction
@@ -361,7 +210,6 @@ Resources:
       FunctionName: ResumeParser_AddJob
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
-      # Role: "arn:aws:iam::287269978254:role/LabRole"
       Runtime: nodejs20.x
       Code:
         S3Bucket: resume-parser-yola-add-job
@@ -375,7 +223,6 @@ Resources:
       FunctionName: ResumeParser_JobsList
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
-      # Role: "arn:aws:iam::287269978254:role/LabRole"
       Runtime: nodejs20.x
       Code:
         S3Bucket: resume-parser-yola-jobs-list
@@ -389,7 +236,6 @@ Resources:
       FunctionName: ResumeParser_JobDetails
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
-      # Role: "arn:aws:iam::287269978254:role/LabRole"
       Runtime: nodejs20.x
       Code:
         S3Bucket: resume-parser-yola-job-details
@@ -403,7 +249,6 @@ Resources:
       FunctionName: ResumeParser_UpdateJob
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
-      # Role: "arn:aws:iam::287269978254:role/LabRole"
       Runtime: nodejs20.x
       Code:
         S3Bucket: resume-parser-yola-update-job
@@ -417,7 +262,6 @@ Resources:
       FunctionName: ResumeParser_DeleteJob
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
-      # Role: "arn:aws:iam::287269978254:role/LabRole"
       Runtime: nodejs20.x
       Code:
         S3Bucket: resume-parser-yola-delete-job
@@ -431,7 +275,6 @@ Resources:
       FunctionName: ResumeParser_UserLogin
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
-      # Role: "arn:aws:iam::287269978254:role/LabRole"
       Code:
         S3Bucket: resume-parser-yola-user-login
         S3Key: Archive.zip
@@ -445,7 +288,6 @@ Resources:
       FunctionName: ResumeParser_UserRegistration
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
-      # Role: "arn:aws:iam::287269978254:role/LabRole"
       Runtime: nodejs20.x
       Code:
         S3Bucket: resume-parser-yola-user-registration
@@ -804,6 +646,116 @@ Resources:
       - JobsDeleteMethod
       - LoginMethod
       - RegisterMethod
+
+  ReactAppLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: ami-04a81a99f5ec58529
+      InstanceType: t2.micro
+      SecurityGroups:
+        - !Ref PublicSecurityGroup
+      KeyName: !Ref KeyPairName
+      AssociatePublicIpAddress: true
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -e
+          exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+ 
+          echo "Starting script execution..."
+ 
+          # Update and install necessary packages
+          sudo apt-get update -y
+          sudo apt-get install -y git nodejs npm nginx
+ 
+          echo "Packages updated and installed."
+ 
+          # Clone the project repository
+          GIT_REPO_URL="https://github.com/Yola21/Job-ATS.git"
+          sudo git clone "$GIT_REPO_URL" /home/ubuntu/react-app
+ 
+          echo "Repository cloned."
+ 
+          # Change to the project directory
+          cd /home/ubuntu/react-app/Frontend
+
+          API_URL="https://${ResumeParserApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+ 
+          echo "REACT_APP_API_URL=$API_URL | sudo tee .env
+          # Install npm dependencies and build the project
+          sudo npm install
+          sudo npm run build
+ 
+          echo "npm dependencies installed and project built."
+ 
+          # Configure Nginx to proxy requests to the Node.js application
+          PUBLIC_IP=$(curl -s http://checkip.amazonaws.com)
+          echo "Public IP address: $PUBLIC_IP"
+ 
+          echo '
+          server {
+              listen 80;
+              server_name $PUBLIC_IP;  # Using "_" to accept all requests
+ 
+              location / {
+                  proxy_pass http://localhost:3000;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection "upgrade";
+                  proxy_set_header Host $host;
+                  proxy_cache_bypass $http_upgrade;
+              }
+          }' | sudo tee /etc/nginx/sites-available/react-app
+ 
+          sudo ln -s /etc/nginx/sites-available/react-app /etc/nginx/sites-enabled/
+          sudo nginx -t
+          sudo systemctl restart nginx
+ 
+          # Install PM2 and start the application
+          sudo npm install -g pm2
+          sudo pm2 start npm --name "resume-parser" -- start
+          sudo pm2 save
+          sudo pm2 startup
+ 
+          echo "PM2 installed and application started."
+ 
+          echo "Nginx configured to proxy requests to Node.js application."
+          echo "Script execution completed."
+          echo $API_URL
+ 
+  ReactAppAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet
+      LaunchConfigurationName: !Ref ReactAppLaunchConfig
+      MinSize: '1'
+      MaxSize: '3'
+      DesiredCapacity: '1'
+      Tags:
+        - Key: Name
+          Value: ReactAppInstance
+          PropagateAtLaunch: true
+ 
+  ScaleUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref ReactAppAutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 60.0
+ 
+  ScaleDownPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref ReactAppAutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 30.0
 
 Outputs:
   ApiUrl:
